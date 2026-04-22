@@ -1,0 +1,14 @@
+[project]
+name = "cookunity-shared-cart"
+version = "0.1.0"
+description = "LAN-local shared CookUnity cart."
+requires-python = ">=3.11"
+# The app itself is stdlib-only. Dev deps (tests) live below.
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-q"

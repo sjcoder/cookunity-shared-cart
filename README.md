@@ -77,14 +77,39 @@ Favorites live only in each browser's `localStorage`, keyed by stable meal ID (`
 ## File layout
 
 ```
-scrape.py          # menu exporter (CLI)
-serve.py           # interactive server
-Dockerfile         # python:3.12-slim, copies both scripts
-compose.yaml       # port 8001→8000, mounts menus/ + state/
-.env.example       # seed credentials
-menus/             # cached <date>.json / .html (gitignored)
-state/creds.json   # runtime-updated auth (gitignored — DO NOT COMMIT)
+scrape.py              # menu exporter (standalone CLI, holds fetch_menu)
+serve.py               # thin entry point → cookunity.cli.main
+cookunity/             # the app
+  __init__.py
+  dates.py             # upcoming_mondays, date parsing
+  curl_paste.py        # parse a pasted curl → {token, cookie, cart_id}
+  env.py               # .env loader + state/creds.json persistence
+  proxy.py             # CartProxy — all outbound HTTP to CookUnity
+  state.py             # per-date menu cache + lazy fetch
+  render.py            # HTML rendering (reads assets/page.{css,js})
+  handler.py           # HTTP routes (BaseHTTPRequestHandler subclass)
+  cli.py               # argparse + server boot
+  assets/
+    page.css           # the interactive page's styles
+    page.js            # the interactive page's client code
+tests/                 # pytest suite — see "Running tests" below
+Dockerfile             # python:3.12-slim, copies scripts + cookunity/
+compose.yaml           # port 8001→8000, mounts menus/ + state/
+swarm.yaml             # Traefik-labeled deploy for Docker Swarm
+.env.example           # seed credentials
+menus/                 # cached <date>.json / .html (gitignored)
+state/creds.json       # runtime-updated auth (gitignored — DO NOT COMMIT)
 ```
+
+### Running tests
+
+```bash
+uv run --with pytest python -m pytest tests/
+```
+
+The suite has no network calls — `CartProxy` tests patch `urllib.request.urlopen`,
+and `State` tests inject a fake `fetch_menu`. Adding new features should come
+with a test at the same module level (`tests/test_<module>.py`).
 
 ## Caveats
 

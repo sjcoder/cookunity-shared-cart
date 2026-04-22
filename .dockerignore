@@ -1,10 +1,16 @@
 .env
 menus/
+state/
 __pycache__/
 *.pyc
 .git/
+.github/
 .gitignore
 .env.example
 Dockerfile
 compose.yaml
+swarm.yaml
 .dockerignore
+tests/
+pyproject.toml
+README.md
