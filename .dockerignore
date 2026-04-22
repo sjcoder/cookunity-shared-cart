@@ -1,0 +1,10 @@
+.env
+menus/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.env.example
+Dockerfile
+compose.yaml
+.dockerignore

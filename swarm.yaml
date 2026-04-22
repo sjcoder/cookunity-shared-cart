@@ -1,0 +1,57 @@
+version: '3.3'
+# Deploy onto the swarm behind Traefik. The only things likely to differ
+# between clusters are the Host() rule and the docker.network name —
+# both are parameterized via env vars below so the file stays portable:
+#   KITTY_HOST=cookunity-menu.example.com docker stack deploy -c swarm.yaml kitty
+#
+# Prereqs on the swarm node:
+#   1. Build and push the image (or build on the node):
+#        docker build -t ghcr.io/YOU/cookunity-scrape:latest .
+#        docker push ghcr.io/YOU/cookunity-scrape:latest
+#   2. Create /var/data/config/kitty/ on the node:
+#        sudo mkdir -p /var/data/config/kitty/{state,menus}
+#        sudo chown 1000:1000 /var/data/config/kitty/{state,menus}
+#   3. Drop a .env alongside the seed credentials (CU_AUTH_TOKEN, CU_COOKIE,
+#      CU_CART_ID). Once running you can refresh via the ⚙ Auth UI; the
+#      state/creds.json overrides the .env on subsequent restarts.
+services:
+  kitty:
+    image: ghcr.io/YOU/cookunity-scrape:latest
+    environment:
+      CU_LAN_IP: ${KITTY_HOST:-cookunity-menu.example.com}
+    env_file:
+      - /var/data/config/kitty/.env
+    volumes:
+      - /var/data/config/kitty/menus:/app/menus
+      - /var/data/config/kitty/state:/app/state
+    networks:
+      - internal
+      - traefik-public
+    logging:
+      driver: json-file
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: unless-stopped
+      labels:
+        traefik.enable: 'true'
+        traefik.constraint-label: traefik-public
+        traefik.docker.network: traefik-public
+        traefik.http.services.kitty.loadbalancer.server.port: '8000'
+        # HTTP → HTTPS redirect
+        traefik.http.routers.kitty-http.rule: Host(`${KITTY_HOST:-cookunity-menu.example.com}`)
+        traefik.http.routers.kitty-http.entrypoints: http
+        traefik.http.routers.kitty-http.middlewares: https-redirect
+        # HTTPS router with Let's Encrypt
+        traefik.http.routers.kitty-https.rule: Host(`${KITTY_HOST:-cookunity-menu.example.com}`)
+        traefik.http.routers.kitty-https.entrypoints: https
+        traefik.http.routers.kitty-https.tls: 'true'
+        traefik.http.routers.kitty-https.tls.certresolver: le
+networks:
+  internal:
+    driver: overlay
+    ipam:
+      config:
+        - subnet: 172.16.42.0/24
+  traefik-public:
+    external: true

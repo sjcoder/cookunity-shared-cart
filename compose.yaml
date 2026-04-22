@@ -1,0 +1,14 @@
+services:
+  cookunity:
+    build: .
+    image: cookunity-scrape
+    container_name: cookunity
+    ports:
+      # host:container — change the host side if 8000 is busy on your Mac.
+      - "8001:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./menus:/app/menus
+      - ./state:/app/state
+    restart: unless-stopped
