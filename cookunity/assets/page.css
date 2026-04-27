@@ -67,6 +67,10 @@ section.category.hidden { display:none; }
 .nav-link { padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:13px; font-weight:600; border:1px solid var(--line); }
 .nav-link:hover { background:var(--fg); color:#fff; border-color:var(--fg); }
 .nav-link .count { display:inline-block; margin-left:4px; font-size:11px; background:#e6a800; color:#fff; padding:1px 6px; border-radius:999px; }
+#auth-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:6px; vertical-align:middle; background:#bbb; transition:background .2s; }
+#auth-dot[data-state="ok"] { background:var(--ok); box-shadow:0 0 0 3px rgba(42,160,106,.18); }
+#auth-dot[data-state="expired"] { background:#b00020; box-shadow:0 0 0 3px rgba(176,0,32,.18); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.55; } }
 #favorites-view { display:none; }
 body.view-favorites #favorites-view { display:block; }
 body.view-favorites main.page { display:none; }

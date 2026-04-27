@@ -95,6 +95,8 @@ def build_handler(
                 return self._get_cart()
             if path == "/api/creds":
                 return self._get_creds()
+            if path == "/api/auth/check":
+                return self._auth_check()
             self.send_error(404)
 
         def do_POST(self):  # noqa: N802
@@ -133,6 +135,40 @@ def build_handler(
                 return self._json(400, {"error": str(e)})
             status, body = proxy.get(d)
             self._write(status, "application/json", body, extra_headers={"cache-control": "no-store"})
+
+        def _auth_check(self):
+            """Lightweight ping: hit the cart endpoint for the next upcoming
+            Monday. 200 → creds work; 401/403 → expired; anything else → some
+            other upstream issue. We never raise on this path so the UI can
+            always render the result."""
+            if not proxy.token:
+                return self._json(200, {
+                    "ok": False,
+                    "status": 0,
+                    "message": "No credentials loaded — paste a curl in #auth.",
+                })
+            test_date = (state.upcoming or [default_date])[0]
+            status, body = proxy.get(test_date)
+            if status == 200:
+                return self._json(200, {"ok": True, "status": 200, "tested_date": test_date})
+            if status in (401, 403):
+                return self._json(200, {
+                    "ok": False,
+                    "status": status,
+                    "tested_date": test_date,
+                    "message": "Auth expired — paste a fresh curl in #auth.",
+                })
+            # Could be a transient upstream blip; surface the body for context.
+            try:
+                detail = json.loads(body).get("message") or json.loads(body).get("error") or ""
+            except (json.JSONDecodeError, AttributeError):
+                detail = body[:200].decode(errors="replace") if body else ""
+            return self._json(200, {
+                "ok": False,
+                "status": status,
+                "tested_date": test_date,
+                "message": f"Upstream returned {status}. {detail}".strip(),
+            })
 
         def _get_creds(self):
             tail = (proxy.token or "")[-8:] if proxy.token else ""

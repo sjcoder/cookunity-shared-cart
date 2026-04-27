@@ -93,7 +93,7 @@ function applyRoute() {
   document.getElementById('auth-link').style.display = (isFavs || isAuth) ? 'none' : '';
   document.getElementById('menu-link').style.display = (isFavs || isAuth) ? '' : 'none';
   if (isFavs) renderFavoritesView();
-  if (isAuth) loadCredsInfo();
+  if (isAuth) { loadCredsInfo(); checkAuth(); }
 }
 
 async function loadCredsInfo() {
@@ -242,11 +242,44 @@ function renderCart() {
   });
 }
 
+let autoRedirected = false;  // only auto-redirect once per page load
+
+function maybeAutoRedirect(orderPlaced) {
+  // If the URL had no ?date= and the default landed on an already-ordered week,
+  // jump forward to the next dropdown option. Explicit ?date= URLs are left
+  // alone so revisiting an ordered week still works.
+  if (autoRedirected || !orderPlaced) return;
+  if (new URL(location.href).searchParams.has('date')) return;
+  const opts = [...document.getElementById('date-picker').options].map(o => o.value);
+  const idx = opts.indexOf(MENU_DATE);
+  const next = opts.slice(idx + 1).find(Boolean);
+  if (!next) return;
+  autoRedirected = true;
+  location.href = '/?date=' + encodeURIComponent(next);
+}
+
+function setAuthIndicator(state) {
+  // state: 'ok' | 'expired' | 'unknown'
+  const dot = document.getElementById('auth-dot');
+  if (!dot) return;
+  dot.dataset.state = state;
+  dot.title = {
+    ok: 'CookUnity auth OK',
+    expired: 'CookUnity auth expired — click ⚙ Auth to refresh',
+    unknown: 'Auth status unknown',
+  }[state] || '';
+}
+
 async function syncCart(showToast=false) {
   try {
     const res = await fetch(withDate('/api/cart'), { cache: 'no-store' });
+    if (res.status === 401 || res.status === 403) {
+      setAuthIndicator('expired');
+      throw new Error('Auth expired (HTTP ' + res.status + ')');
+    }
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const body = await res.json();
+    setAuthIndicator('ok');
     const map = new Map();
     for (const p of body.products || []) {
       map.set(p.inventory_id, p);
@@ -260,10 +293,39 @@ async function syncCart(showToast=false) {
     updateReviewButton(order);
     document.querySelector('#cart .synced').textContent = 'synced ' + fmtTime();
     renderCart();
+    maybeAutoRedirect(!!order);
     if (showToast) toast('Cart synced');
   } catch (e) {
     document.querySelector('#cart .synced').textContent = 'sync failed';
     if (showToast) toast('Sync failed: ' + e.message, true);
+  }
+}
+
+async function checkAuth() {
+  const btn = document.getElementById('auth-test');
+  const out = document.getElementById('auth-test-result');
+  if (btn) btn.disabled = true;
+  if (out) { out.className = 'status'; out.textContent = 'Testing…'; out.style.display = 'block'; }
+  try {
+    const res = await fetch('/api/auth/check');
+    const body = await res.json();
+    if (body.ok) {
+      setAuthIndicator('ok');
+      if (out) {
+        out.className = 'status ok';
+        out.textContent = `✓ Auth OK — tested against /cart/v2/${body.tested_date}`;
+      }
+    } else {
+      setAuthIndicator(body.status === 401 || body.status === 403 ? 'expired' : 'unknown');
+      if (out) {
+        out.className = 'status err';
+        out.textContent = `✗ ${body.message || 'Auth failed (HTTP ' + body.status + ')'}`;
+      }
+    }
+  } catch (e) {
+    if (out) { out.className = 'status err'; out.textContent = 'Test failed: ' + e.message; }
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -580,6 +642,8 @@ document.addEventListener('DOMContentLoaded', () => {
     location.href = '/?date=' + encodeURIComponent(d) + hash;
   });
   document.getElementById('auth-save').addEventListener('click', saveCreds);
+  const authTest = document.getElementById('auth-test');
+  if (authTest) authTest.addEventListener('click', checkAuth);
   document.getElementById('favs-clear').addEventListener('click', () => {
     if (Object.keys(favs).length === 0) return;
     if (!confirm('Clear all ' + Object.keys(favs).length + ' favorites?')) return;

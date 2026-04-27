@@ -309,7 +309,7 @@ def render_page(
   <select id="date-picker" title="Delivery date (Monday)">{date_options}</select>
   <span class="meta">{total_count} items · data from <span id="fetched-at">{esc(fetched_at)}</span></span>
   <a id="favs-link" class="nav-link" href="#favorites">★ Favorites <span class="count" id="favs-count">0</span></a>
-  <a id="auth-link" class="nav-link" href="#auth" title="Update credentials">⚙ Auth</a>
+  <a id="auth-link" class="nav-link" href="#auth" title="Update credentials">⚙ Auth <span id="auth-dot" data-state="unknown" aria-hidden="true"></span></a>
   <a id="menu-link" class="nav-link" href="#" style="display:none">← Menu</a>
   <button id="refresh" type="button" title="Re-fetch menu from CookUnity">↻ Refresh</button>
   <input id="search" type="search" placeholder="Search meals, chefs, cuisines…">
@@ -341,9 +341,11 @@ def render_page(
     <textarea id="auth-curl" placeholder="curl 'https://subscription.cookunity.com/menu-service/graphql' \\&#10;  -H 'authorization: ...' \\&#10;  -b 'CU_TrackUuid=...; appSession=...' \\&#10;  ..."></textarea>
     <div class="actions">
       <button id="auth-save" type="button" class="primary">Save credentials</button>
+      <button id="auth-test" type="button">Test connection</button>
       <a href="#" class="nav-link">← Cancel</a>
     </div>
     <div id="auth-status" class="status"></div>
+    <div id="auth-test-result" class="status"></div>
     <div class="creds-info" id="creds-info"></div>
   </div>
 </section>
