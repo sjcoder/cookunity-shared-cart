@@ -2,11 +2,17 @@
 
 A small local web app that lets two people share one CookUnity subscription cart.
 
+![Browsing the menu — pink card grid with steppers](docs/screenshot-menu.png)
+
 ## The backstory
 
 My partner and I share a CookUnity subscription, and we call each other Kitty. CookUnity doesn't offer a shared-cart feature — the cart lives inside my account and they can't see or edit it unless they log in as me. That worked badly: I'd pick meals, they'd never get a say, or they'd text me screenshots of things they wanted and I'd manually find them.
 
-So this project runs on my laptop, exposes a page on our LAN, and gives him his own view of my cart with working add/remove buttons. The auth and cookies live on the server, so he never sees credentials — he just browses meals and taps ＋. The server relays his clicks to CookUnity's real API with my session attached.
+So this project runs on my laptop, exposes a page on our LAN, and gives them their own view of my cart with working add/remove buttons. The auth and cookies live on the server, so they never see credentials — they just browse meals and tap ＋. The server relays their clicks to CookUnity's real API with my session attached.
+
+Once an order is placed, the page locks down for that week — green banner up top, every ordered meal flagged, controls dimmed:
+
+![Locked-down ordered week — green banner, ORDERED tags on each meal, cart panel with the 8-item delivery](docs/screenshot-ordered.png)
 
 ## What it does
 
