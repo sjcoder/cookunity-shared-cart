@@ -68,7 +68,7 @@ function renderFavoritesView() {
       <img src="${img}" alt="" onerror="this.style.visibility='hidden'">
       <div class="info">
         <div class="name">${name}</div>
-        <div class="meta">${chef ? 'Chef ' + chef + ' · ' : ''}${priceStr}${!current ? ' · <span class="unavail">Not on this week\\'s menu</span>' : ''}</div>
+        <div class="meta">${chef ? 'Chef ' + chef + ' · ' : ''}${priceStr}${!current ? " · <span class=\"unavail\">Not on this week's menu</span>" : ''}</div>
       </div>
       ${current ? `<button class="add" data-inv="${current.inventoryId}">Add to cart</button>` : ''}
       <button class="remove" data-key="${key}">Remove</button>
@@ -347,7 +347,7 @@ function extractBreakdownRows(data) {
     const label = attrs.label || attrs.title || attrs.name;
     const value = attrs.value || attrs.amount || attrs.price;
     if (typeof label === 'string' && (typeof value === 'string' || typeof value === 'number')) {
-      if (/\\$[\\d,.]+/.test(String(value)) || /total|subtotal|fee|tax|tip|discount|delivery|extras|plan/i.test(label)) {
+      if (/\$[\d,.]+/.test(String(value)) || /total|subtotal|fee|tax|tip|discount|delivery|extras|plan/i.test(label)) {
         rows.push({ label, value: String(value) });
       }
     }
@@ -565,7 +565,7 @@ document.addEventListener('click', (e) => {
       name: snap.name,
       image: snap.image,
       price: snap.price,
-      chef: (card.querySelector('.chef') || {}).textContent?.replace(/^Chef\\s+/, '') || '',
+      chef: (card.querySelector('.chef') || {}).textContent?.replace(/^Chef\s+/, '') || '',
       isBundle: !!snap.isBundle,
     });
     return;
