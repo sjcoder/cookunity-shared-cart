@@ -50,6 +50,12 @@ class StubState:
         self.upcoming = ["2026-04-27", "2026-05-04", "2026-05-11"]
         self.invalidated = False
 
+    def get(self, date):
+        return {
+            "data": {"data": {"menu": {"meals": [], "bundles": []}}},
+            "page_html": f"<html><body>menu for {date}</body></html>".encode(),
+        }
+
     def invalidate_all(self):
         self.invalidated = True
 
@@ -127,6 +133,55 @@ def test_get_creds_includes_token_tail(tmp_path):
     assert body["token"] is True
     assert body["token_tail"] == "12345678"
     assert body["cart_id"] == "stub-cart"
+
+
+def test_bare_root_redirects_to_first_unordered_monday(tmp_path):
+    """Each upcoming Monday gets a separate cart fetch; first one without an
+    `order` field is where we land."""
+    proxy = StubProxy()
+    proxy.calls.clear()
+    # Cart payloads keyed by date — 04-27 is already ordered, 05-04 is open.
+    cart_by_date = {
+        "2026-04-27": (200, json.dumps({"products": [], "order": {"id": "x"}}).encode()),
+        "2026-05-04": (200, json.dumps({"products": [], "order": None}).encode()),
+        "2026-05-11": (200, json.dumps({"products": [], "order": None}).encode()),
+    }
+
+    def get(date):  # override
+        proxy.calls.append(("get", date))
+        return cart_by_date[date]
+
+    proxy.get = get  # type: ignore[assignment]
+
+    with _serve(proxy, StubState(), default_date="2026-04-27", tmp_path=tmp_path) as base:
+        # Don't follow redirects — assert we got one.
+        req = urllib.request.Request(base + "/")
+        opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler())
+
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def http_error_302(self, req, fp, code, msg, headers):
+                return fp  # don't follow
+
+        opener = urllib.request.build_opener(NoRedirect())
+        with opener.open(base + "/") as resp:
+            assert resp.status == 302
+            assert resp.headers["location"] == "/?date=2026-05-04"
+
+    # Should have stopped scanning once it found 05-04.
+    assert proxy.calls[0] == ("get", "2026-04-27")
+    assert proxy.calls[1] == ("get", "2026-05-04")
+    assert ("get", "2026-05-11") not in proxy.calls
+
+
+def test_explicit_date_in_url_skips_landing_redirect(tmp_path):
+    """If the user explicitly typed /?date=2026-04-27 (or clicked the dropdown),
+    respect it — even if that week is already ordered."""
+    proxy = StubProxy(get_response=(200, json.dumps({"order": {"id": "x"}, "products": []}).encode()))
+    with _serve(proxy, StubState(), tmp_path=tmp_path) as base:
+        # Renders 200 directly, no redirect.
+        with urllib.request.urlopen(base + "/?date=2026-04-27") as resp:
+            assert resp.status == 200
+            assert b"<html" in resp.read()
 
 
 def test_get_cart_passes_through_upstream_status(tmp_path):

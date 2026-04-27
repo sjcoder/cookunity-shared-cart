@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import urllib.parse
 from datetime import date
 from http.server import BaseHTTPRequestHandler
@@ -45,6 +46,12 @@ def build_handler(
     We build it dynamically so the closure can hold references to the shared
     ``state``, ``proxy`` and config without a global.
     """
+
+    # Tiny TTL cache for "which upcoming Monday should `/` land on?". Without
+    # this every bare `/` reload would call CookUnity once per upcoming Monday
+    # to ask "is it ordered?". Mutable so the closure below can update it.
+    landing_cache: dict[str, object] = {"date": None, "expires": 0.0}
+    LANDING_CACHE_TTL = 60.0
 
     class Handler(BaseHTTPRequestHandler):
         # -- plumbing ---------------------------------------------------------
@@ -115,7 +122,49 @@ def build_handler(
             self.send_error(404)
 
         # -- GET handlers -----------------------------------------------------
+        def _pick_landing_date(self) -> str:
+            """Walk upcoming Mondays and return the first one without an order.
+
+            Falls back to ``default_date`` if everything's ordered or upstream
+            fails. Result is cached briefly so back-to-back reloads don't each
+            spawn N CookUnity round-trips.
+            """
+            now = time.time()
+            cached = landing_cache
+            if cached["date"] and cached["expires"] > now:
+                return cached["date"]  # type: ignore[return-value]
+
+            chosen = default_date
+            for d in state.upcoming or [default_date]:
+                status, body = proxy.get(d)
+                if status != 200:
+                    # Auth busted or upstream blip — show whatever we'd default
+                    # to and let the JS auth indicator surface the problem.
+                    continue
+                try:
+                    if not (json.loads(body) or {}).get("order"):
+                        chosen = d
+                        break
+                except json.JSONDecodeError:
+                    continue
+
+            landing_cache["date"] = chosen
+            landing_cache["expires"] = now + LANDING_CACHE_TTL
+            return chosen
+
         def _get_index(self):
+            parsed = urllib.parse.urlparse(self.path)
+            qs = urllib.parse.parse_qs(parsed.query)
+            if "date" not in qs:
+                # Bare `/` — pick smart default and redirect so the URL bar
+                # reflects what's being shown. Cheap on the second visit
+                # thanks to the 60s landing cache.
+                chosen = self._pick_landing_date()
+                self.send_response(302)
+                self.send_header("location", f"/?date={chosen}")
+                self.send_header("cache-control", "no-store")
+                self.end_headers()
+                return
             try:
                 d = _date_from_query(self.path, default_date)
                 entry = state.get(d)
