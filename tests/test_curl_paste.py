@@ -17,7 +17,7 @@ CURL_WITH_ANSI_C_COOKIE = """curl 'https://subscription.cookunity.com/menu-servi
   -b $'CU_TrackUuid=xxx; appSession=fake-session; CU_discountText=Week\\u00211\\u0021'
 """
 
-CURL_WITH_CART_URL = """curl 'https://subscription.cookunity.com/sdui-service/cart/v2/3e2b4a53-e4c7-4951-9ef6-a8f2230b5be8/products' \\
+CURL_WITH_CART_URL = """curl 'https://subscription.cookunity.com/sdui-service/cart/v2/00000000-0000-0000-0000-000000000000/products' \\
   -H 'authorization: eyJTEST.abc.def' \\
   -b 'appSession=x'
 """
@@ -39,7 +39,7 @@ def test_parse_curl_decodes_ansi_c_cookie():
 
 def test_parse_curl_extracts_cart_uuid():
     got = parse_curl(CURL_WITH_CART_URL)
-    assert got["cart_id"] == "3e2b4a53-e4c7-4951-9ef6-a8f2230b5be8"
+    assert got["cart_id"] == "00000000-0000-0000-0000-000000000000"
 
 
 def test_parse_curl_strips_bearer_prefix():
