@@ -47,8 +47,30 @@ def test_parse_curl_strips_bearer_prefix():
     assert parse_curl(curl)["token"] == "eyJTEST.abc.def"
 
 
+def test_parse_curl_accepts_cookunity_incentives_devtools_shape():
+    curl = """curl 'https://subscription.cookunity.com/sdui-service/incentives/available-products-by-types?types=cashback%2Cmulti_buy&deliveryDate=2026-06-08' \\
+  -H 'accept: */*' \\
+  -H 'authorization: eyJTEST.abc.def' \\
+  -H 'content-type: application/json' \\
+  -b $'@CU/discountText=Get%2050%25%20off\\u0021; appSession=fake-session; other=x' \\
+  -H 'platform: web' \\
+  -H 'user-agent: Mozilla/5.0'
+"""
+    got = parse_curl(curl)
+    assert got["token"] == "eyJTEST.abc.def"
+    assert "appSession=fake-session" in got["cookie"]
+    assert "\\u0021" not in got["cookie"]
+
+
+def test_parse_curl_accepts_long_header_option_forms():
+    curl = """curl 'x' --header='authorization: Bearer eyJTEST.abc.def' --cookie='appSession=x'"""
+    got = parse_curl(curl)
+    assert got["token"] == "eyJTEST.abc.def"
+    assert got["cookie"] == "appSession=x"
+
+
 def test_parse_curl_rejects_missing_auth():
-    with pytest.raises(ValueError, match="authorization"):
+    with pytest.raises(ValueError, match="subscription.cookunity.com"):
         parse_curl("curl 'x' -b 'appSession=x'")
 
 

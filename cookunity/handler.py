@@ -86,6 +86,111 @@ def build_handler(
             ).encode()
             self._write(500, "text/html; charset=utf-8", body)
 
+        def _render_auth_bootstrap(self):
+            body = b"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Update CookUnity credentials</title>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:#fff6fa;color:#24161b}
+main{max-width:760px;margin:8vh auto;padding:0 20px}
+h1{font-size:28px;margin:0 0 12px}
+p{line-height:1.5;color:#5f4a52}
+textarea{box-sizing:border-box;width:100%;min-height:260px;border:1px solid #d8c2cb;border-radius:8px;padding:12px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:white}
+.actions{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+button{border:1px solid #24161b;background:#24161b;color:white;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}
+.status{margin-top:12px;padding:10px 12px;border-radius:6px;display:none}
+.ok{display:block;background:#e8f6ee;color:#125b32}
+.err{display:block;background:#fdecef;color:#8a1026}
+</style>
+</head>
+<body>
+<main>
+<h1>Update CookUnity credentials</h1>
+<p>No credentials are loaded yet. Paste a fresh authenticated API request copied from DevTools as cURL, then save. Good choices are requests to <code>subscription.cookunity.com/sdui-service/cart</code>, <code>subscription.cookunity.com/sdui-service/incentives</code>, or <code>subscription.cookunity.com/menu-service/graphql</code>. Tracking requests such as <code>martech.cookunity.com/v1/t</code> do not include the token and cookie this app needs.</p>
+<textarea id="curl" autofocus placeholder="curl 'https://subscription.cookunity.com/...' \
+  -H 'authorization: ...' \
+  -b '... appSession=...'"></textarea>
+<div class="actions">
+  <button id="test" type="button">Test connection</button>
+  <button id="save" type="button">Save credentials</button>
+</div>
+<div id="status" class="status"></div>
+</main>
+<script>
+const save = document.getElementById('save');
+const test = document.getElementById('test');
+const statusEl = document.getElementById('status');
+async function postCurl(path) {
+  const curl = document.getElementById('curl').value.trim();
+  if (!curl) throw new Error('Paste a curl command first.');
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: {'content-type': 'application/json'},
+    body: JSON.stringify({curl})
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+  return body;
+}
+test.addEventListener('click', async () => {
+  statusEl.className = 'status';
+  statusEl.style.display = 'none';
+  test.disabled = true;
+  save.disabled = true;
+  const original = test.textContent;
+  test.textContent = 'Testing...';
+  try {
+    const body = await postCurl('/api/auth/check');
+    if (!body.ok) throw new Error(body.message || ('Auth failed (HTTP ' + body.status + ')'));
+    statusEl.className = 'status ok';
+    statusEl.textContent = 'Auth OK. Credentials have not been saved yet.';
+    statusEl.style.display = 'block';
+  } catch (e) {
+    statusEl.className = 'status err';
+    statusEl.textContent = String(e.message || e);
+    statusEl.style.display = 'block';
+  } finally {
+    test.disabled = false;
+    save.disabled = false;
+    test.textContent = original;
+  }
+});
+save.addEventListener('click', async () => {
+  statusEl.className = 'status';
+  statusEl.style.display = 'none';
+  save.disabled = true;
+  test.disabled = true;
+  const original = save.textContent;
+  save.textContent = 'Saving...';
+  try {
+    await postCurl('/api/creds');
+    statusEl.className = 'status ok';
+    statusEl.textContent = 'Saved. Loading menu...';
+    statusEl.style.display = 'block';
+    setTimeout(() => { location.href = '/'; }, 700);
+  } catch (e) {
+    statusEl.className = 'status err';
+    statusEl.textContent = String(e.message || e);
+    statusEl.style.display = 'block';
+    save.disabled = false;
+    test.disabled = false;
+    save.textContent = original;
+  }
+});
+</script>
+</body>
+</html>"""
+            self._write(
+                200,
+                "text/html; charset=utf-8",
+                body,
+                extra_headers={"cache-control": "no-store"},
+            )
+
         def _resolve_date(self, payload: dict | None = None) -> str:
             """Prefer ``?date=`` in the URL; fall back to the JSON body; then default."""
             if "date=" in self.path:
@@ -114,6 +219,7 @@ def build_handler(
                 "/api/cart/remove": self._cart_remove,
                 "/api/refresh": self._refresh,
                 "/api/creds": self._creds_update,
+                "/api/auth/check": self._auth_check,
                 "/api/order/preview": self._order_preview,
                 "/api/order/place": self._order_place,
             }
@@ -135,8 +241,9 @@ def build_handler(
             if cached["date"] and cached["expires"] > now:
                 return cached["date"]  # type: ignore[return-value]
 
-            chosen = default_date_fn()
-            for d in state.upcoming or [chosen]:
+            dates = state.upcoming or [default_date_fn()]
+            chosen = dates[0]
+            for d in dates:
                 status, body = proxy.get(d)
                 if status != 200:
                     # Auth busted or upstream blip — show whatever we'd default
@@ -154,6 +261,8 @@ def build_handler(
             return chosen
 
         def _get_index(self):
+            if not proxy.token:
+                return self._render_auth_bootstrap()
             parsed = urllib.parse.urlparse(self.path)
             qs = urllib.parse.parse_qs(parsed.query)
             if "date" not in qs:
@@ -191,6 +300,23 @@ def build_handler(
             Monday. 200 → creds work; 401/403 → expired; anything else → some
             other upstream issue. We never raise on this path so the UI can
             always render the result."""
+            tested_unsaved = False
+            restore_creds: tuple[str, str, str] | None = None
+            if self.command == "POST":
+                payload = self._read_json()
+                curl_text = payload.get("curl") or ""
+                if curl_text.strip():
+                    try:
+                        parsed = parse_curl(curl_text)
+                    except ValueError as e:
+                        return self._json(400, {"error": str(e)})
+                    restore_creds = (proxy.token, proxy.cookie, proxy.cart_id)
+                    proxy.update(
+                        token=parsed["token"],
+                        cookie=parsed["cookie"],
+                        cart_id=parsed.get("cart_id"),
+                    )
+                    tested_unsaved = True
             if not proxy.token:
                 return self._json(200, {
                     "ok": False,
@@ -198,27 +324,40 @@ def build_handler(
                     "message": "No credentials loaded — paste a curl in #auth.",
                 })
             test_date = (state.upcoming or [default_date_fn()])[0]
-            status, body = proxy.get(test_date)
+            try:
+                status, body = proxy.get(test_date)
+            finally:
+                if restore_creds:
+                    proxy.token, proxy.cookie, proxy.cart_id = restore_creds
             if status == 200:
-                return self._json(200, {"ok": True, "status": 200, "tested_date": test_date})
+                response = {"ok": True, "status": 200, "tested_date": test_date}
+                if tested_unsaved:
+                    response["tested_unsaved"] = True
+                return self._json(200, response)
             if status in (401, 403):
-                return self._json(200, {
+                response = {
                     "ok": False,
                     "status": status,
                     "tested_date": test_date,
                     "message": "Auth expired — paste a fresh curl in #auth.",
-                })
+                }
+                if tested_unsaved:
+                    response["tested_unsaved"] = True
+                return self._json(200, response)
             # Could be a transient upstream blip; surface the body for context.
             try:
                 detail = json.loads(body).get("message") or json.loads(body).get("error") or ""
             except (json.JSONDecodeError, AttributeError):
                 detail = body[:200].decode(errors="replace") if body else ""
-            return self._json(200, {
+            response = {
                 "ok": False,
                 "status": status,
                 "tested_date": test_date,
                 "message": f"Upstream returned {status}. {detail}".strip(),
-            })
+            }
+            if tested_unsaved:
+                response["tested_unsaved"] = True
+            return self._json(200, response)
 
         def _get_creds(self):
             tail = (proxy.token or "")[-8:] if proxy.token else ""
@@ -276,6 +415,8 @@ def build_handler(
             except ValueError as e:
                 return self._json(400, {"error": str(e)})
             try:
+                landing_cache["date"] = None
+                landing_cache["expires"] = 0.0
                 entry = state.refresh(d)
                 data = entry["data"]
                 menu = (data.get("data") or {}).get("menu", {})
@@ -307,7 +448,12 @@ def build_handler(
             saved_at = save_creds(creds_path, proxy.token, proxy.cookie, proxy.cart_id)
             creds_meta["source"] = "pasted-curl"
             creds_meta["saved_at"] = saved_at
+            # New creds can change what's ordered/visible: drop rendered pages
+            # and the landing choice. The upcoming list itself needs no poke —
+            # state.upcoming recomputes on every access.
             state.invalidate_all()
+            landing_cache["date"] = None
+            landing_cache["expires"] = 0.0
             self._json(
                 200,
                 {

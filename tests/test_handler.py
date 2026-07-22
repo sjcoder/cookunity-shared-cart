@@ -82,6 +82,17 @@ def _get(url: str) -> tuple[int, dict]:
         return resp.status, json.loads(resp.read())
 
 
+def _post(url: str, payload: dict) -> tuple[int, dict]:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        method="POST",
+        headers={"content-type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        return resp.status, json.loads(resp.read())
+
+
 # -- /api/auth/check ----------------------------------------------------------
 
 
@@ -134,6 +145,38 @@ def test_auth_check_with_no_token_reports_missing_creds(tmp_path):
     assert body["ok"] is False
     assert body["status"] == 0
     assert "credential" in body["message"].lower()
+
+
+def test_no_creds_root_renders_auth_bootstrap(tmp_path):
+    proxy = StubProxy()
+    proxy.token = ""
+    with _serve(proxy, StubState(), tmp_path=tmp_path) as base:
+        with urllib.request.urlopen(base + "/") as resp:
+            body = resp.read().decode()
+    assert "Update CookUnity credentials" in body
+    assert "/api/creds" in body
+    assert "/api/auth/check" in body
+    assert "Test connection" in body
+    assert proxy.calls == []
+
+
+def test_auth_check_can_test_pasted_curl_without_saving(tmp_path):
+    proxy = StubProxy(get_response=(200, b'{"products":[]}'))
+    proxy.token = "old-token"
+    proxy.cookie = "old-cookie"
+    curl = "curl 'x' -H 'authorization: new-token' -b 'appSession=new-cookie'"
+    with _serve(proxy, StubState(), tmp_path=tmp_path) as base:
+        status, body = _post(base + "/api/auth/check", {"curl": curl})
+    assert status == 200
+    assert body == {
+        "ok": True,
+        "status": 200,
+        "tested_date": "2026-04-27",
+        "tested_unsaved": True,
+    }
+    assert proxy.calls == [("get", "2026-04-27")]
+    assert proxy.token == "old-token"
+    assert proxy.cookie == "old-cookie"
 
 
 # -- existing routes — light coverage so the table doesn't bit-rot ------------
