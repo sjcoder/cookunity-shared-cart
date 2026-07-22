@@ -307,13 +307,21 @@ async function checkAuth() {
   if (btn) btn.disabled = true;
   if (out) { out.className = 'status'; out.textContent = 'Testing…'; out.style.display = 'block'; }
   try {
-    const res = await fetch('/api/auth/check');
+    const curl = (document.getElementById('auth-curl')?.value || '').trim();
+    const res = await fetch('/api/auth/check', curl
+      ? {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ curl }),
+        }
+      : undefined);
     const body = await res.json();
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
     if (body.ok) {
       setAuthIndicator('ok');
       if (out) {
         out.className = 'status ok';
-        out.textContent = `✓ Auth OK — tested against /cart/v2/${body.tested_date}`;
+        out.textContent = `✓ Auth OK — tested against /cart/v2/${body.tested_date}${body.tested_unsaved ? ' (not saved yet)' : ''}`;
       }
     } else {
       setAuthIndicator(body.status === 401 || body.status === 403 ? 'expired' : 'unknown');

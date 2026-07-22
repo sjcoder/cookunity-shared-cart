@@ -7,6 +7,7 @@ cookie block — we normalise those before regex-matching.
 from __future__ import annotations
 
 import re
+import shlex
 
 
 _ANSI_C_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "\\": "\\", "'": "'", '"': '"'}
@@ -47,20 +48,60 @@ def parse_curl(text: str) -> dict:
     text = re.sub(r"\$'((?:[^'\\]|\\.)*)'", _ansi_c, text, flags=re.DOTALL)
 
     auth: str | None = None
-    m = re.search(r"-H\s+['\"]authorization:\s*([^'\"]+?)['\"]", text, re.IGNORECASE)
-    if m:
-        auth = m.group(1).strip()
-        if auth.lower().startswith("bearer "):
-            auth = auth[7:].strip()
-
     cookie: str | None = None
-    m = re.search(r"-b\s+['\"]((?:[^'\"\\]|\\.)*)['\"]", text, re.DOTALL)
-    if m:
-        cookie = m.group(1)
-    else:
-        m = re.search(r"-H\s+['\"]cookie:\s*([^'\"]+?)['\"]", text, re.IGNORECASE)
+
+    try:
+        args = shlex.split(text, posix=True)
+    except ValueError:
+        args = []
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        value: str | None = None
+        if arg in ("-H", "--header") and i + 1 < len(args):
+            value = args[i + 1]
+            i += 1
+        elif arg.startswith("--header="):
+            value = arg.split("=", 1)[1]
+        elif arg.startswith("-H") and len(arg) > 2:
+            value = arg[2:]
+
+        if value and ":" in value:
+            name, header_value = value.split(":", 1)
+            if name.strip().lower() == "authorization":
+                auth = header_value.strip()
+            elif name.strip().lower() == "cookie":
+                cookie = header_value.strip()
+
+        value = None
+        if arg in ("-b", "--cookie") and i + 1 < len(args):
+            value = args[i + 1]
+            i += 1
+        elif arg.startswith("--cookie="):
+            value = arg.split("=", 1)[1]
+        elif arg.startswith("-b") and len(arg) > 2:
+            value = arg[2:]
+        if value:
+            cookie = value
+
+        i += 1
+
+    if not auth:
+        m = re.search(r"-H\s+['\"]authorization:\s*([^'\"]+?)['\"]", text, re.IGNORECASE)
+        if m:
+            auth = m.group(1).strip()
+    if auth and auth.lower().startswith("bearer "):
+        auth = auth[7:].strip()
+
+    if not cookie:
+        m = re.search(r"-b\s+['\"]((?:[^'\"\\]|\\.)*)['\"]", text, re.DOTALL)
         if m:
             cookie = m.group(1)
+        else:
+            m = re.search(r"-H\s+['\"]cookie:\s*([^'\"]+?)['\"]", text, re.IGNORECASE)
+            if m:
+                cookie = m.group(1)
 
     cart_id: str | None = None
     m = re.search(r"/cart/v2/([0-9a-fA-F-]{36})", text)
@@ -68,7 +109,13 @@ def parse_curl(text: str) -> dict:
         cart_id = m.group(1)
 
     if not auth:
-        raise ValueError("Could not find an `authorization:` header in the curl.")
+        raise ValueError(
+            "Could not find an `authorization:` header in the curl. "
+            "Pick an authenticated API request from `subscription.cookunity.com`, "
+            "such as `sdui-service/cart`, `sdui-service/incentives`, or "
+            "`menu-service/graphql`; tracking requests like `martech.cookunity.com/v1/t` "
+            "do not include the credentials this app needs."
+        )
     if not cookie:
         raise ValueError("Could not find a cookie (`-b '...'` or `-H 'cookie: ...'`).")
     if "appSession=" not in cookie:

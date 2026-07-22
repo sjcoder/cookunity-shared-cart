@@ -88,6 +88,12 @@ class State:
             self.cache[menu_date] = entry
             return entry
 
+    def set_upcoming(self, upcoming: list[str]) -> None:
+        """Replace the delivery-date options and force pages to re-render."""
+        with self.lock:
+            self.upcoming = upcoming
+            self.cache.clear()
+
     def invalidate_all(self) -> None:
         """Drop all cached HTML (e.g. after creds change mid-session)."""
         with self.lock:

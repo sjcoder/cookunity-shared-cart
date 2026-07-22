@@ -35,22 +35,17 @@ Once an order is placed, the page locks down for that week — green banner up t
 ### First run
 
 1. Clone and enter the repo.
-2. Seed `.env` from the template and drop in a fresh curl's values:
-
-   ```bash
-   cp .env.example .env
-   # edit .env — paste CU_AUTH_TOKEN, CU_COOKIE, CU_CART_ID, CU_LAN_IP
-   ```
-
-   Grab the values from your browser: DevTools → Network → right-click any `menu-service/graphql` request → Copy as cURL. Pull out the `authorization:` header (JWT), the `-b` cookie string, and the UUID in the `/cart/v2/<UUID>/products` URL.
-
-3. Start it:
+2. Start it:
 
    ```bash
    docker compose up -d --build
    ```
 
-4. Share the LAN URL from the container log (or `http://<your-Mac-IP>:8001/`).
+3. Open `http://<your-Mac-IP>:8001/`, paste a signed-in CookUnity request copied from DevTools as cURL, and save it.
+
+4. Share the LAN URL with your partner.
+
+Optional: create `.env` only if you want to seed credentials before first boot or set `CU_LAN_IP` for the startup banner.
 
 Your partner opens that URL on the same Wi-Fi and is up and running — no login, no setup on their end.
 
@@ -102,7 +97,7 @@ tests/                 # pytest suite — see "Running tests" below
 Dockerfile             # python:3.12-slim, copies scripts + cookunity/
 compose.yaml           # port 8001→8000, mounts menus/ + state/
 swarm.yaml             # Traefik-labeled deploy for Docker Swarm
-.env.example           # seed credentials
+.env.example           # optional seed credentials / startup banner config
 menus/                 # cached <date>.json / .html (gitignored)
 state/creds.json       # runtime-updated auth (gitignored — DO NOT COMMIT)
 ```

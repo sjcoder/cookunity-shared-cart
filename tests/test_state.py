@@ -83,6 +83,17 @@ def test_invalidate_all_forces_rerender_on_next_get(tmp_path):
     assert first is not second
 
 
+def test_set_upcoming_forces_rerender_with_new_date_options(tmp_path):
+    (tmp_path / "2026-04-27.json").write_text(json.dumps(make_menu()))
+    s = _state(tmp_path, _fake_fetch_menu([]))
+    first = s.get("2026-04-27")
+    assert b"2026-05-04" not in first["page_html"]
+    s.set_upcoming(["2026-04-27", "2026-05-04"])
+    second = s.get("2026-04-27")
+    assert first is not second
+    assert b"2026-05-04" in second["page_html"]
+
+
 def test_get_raises_without_creds_when_disk_empty(tmp_path):
     s = State(
         menu_dir=tmp_path,

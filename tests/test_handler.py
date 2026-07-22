@@ -49,6 +49,7 @@ class StubState:
     def __init__(self):
         self.upcoming = ["2026-04-27", "2026-05-04", "2026-05-11"]
         self.invalidated = False
+        self.refreshed: list[str] = []
 
     def get(self, date):
         return {
@@ -58,6 +59,16 @@ class StubState:
 
     def invalidate_all(self):
         self.invalidated = True
+
+    def set_upcoming(self, upcoming):
+        self.upcoming = upcoming
+
+    def refresh(self, date):
+        self.refreshed.append(date)
+        return {
+            "data": {"data": {"menu": {"meals": [{"id": "m1"}], "bundles": []}}},
+            "page_html": f"<html><body>menu for {date}</body></html>".encode(),
+        }
 
 
 @contextmanager
@@ -78,6 +89,17 @@ def _serve(proxy, state, default_date="2026-04-27", creds_meta=None, tmp_path: P
 
 def _get(url: str) -> tuple[int, dict]:
     with urllib.request.urlopen(url) as resp:
+        return resp.status, json.loads(resp.read())
+
+
+def _post(url: str, payload: dict) -> tuple[int, dict]:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        method="POST",
+        headers={"content-type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as resp:
         return resp.status, json.loads(resp.read())
 
 
@@ -120,6 +142,67 @@ def test_auth_check_with_no_token_reports_missing_creds(tmp_path):
     assert body["ok"] is False
     assert body["status"] == 0
     assert "credential" in body["message"].lower()
+
+
+def test_no_creds_root_renders_auth_bootstrap(tmp_path):
+    proxy = StubProxy()
+    proxy.token = ""
+    with _serve(proxy, StubState(), tmp_path=tmp_path) as base:
+        with urllib.request.urlopen(base + "/") as resp:
+            body = resp.read().decode()
+    assert "Update CookUnity credentials" in body
+    assert "/api/creds" in body
+    assert "/api/auth/check" in body
+    assert "Test connection" in body
+    assert proxy.calls == []
+
+
+def test_auth_check_can_test_pasted_curl_without_saving(tmp_path):
+    proxy = StubProxy(get_response=(200, b'{"products":[]}'))
+    proxy.token = "old-token"
+    proxy.cookie = "old-cookie"
+    curl = "curl 'x' -H 'authorization: new-token' -b 'appSession=new-cookie'"
+    with _serve(proxy, StubState(), tmp_path=tmp_path) as base:
+        status, body = _post(base + "/api/auth/check", {"curl": curl})
+    assert status == 200
+    assert body == {
+        "ok": True,
+        "status": 200,
+        "tested_date": "2026-04-27",
+        "tested_unsaved": True,
+    }
+    assert proxy.calls == [("get", "2026-04-27")]
+    assert proxy.token == "old-token"
+    assert proxy.cookie == "old-cookie"
+
+
+def test_creds_update_refreshes_date_options(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "cookunity.handler.upcoming_mondays",
+        lambda n: ["2026-06-08", "2026-06-15", "2026-06-22", "2026-06-29"],
+    )
+    state = StubState()
+    proxy = StubProxy()
+    curl = "curl 'x' -H 'authorization: new-token' -b 'appSession=new-cookie'"
+    with _serve(proxy, state, tmp_path=tmp_path) as base:
+        status, body = _post(base + "/api/creds", {"curl": curl})
+    assert status == 200
+    assert body["ok"] is True
+    assert state.upcoming == ["2026-06-08", "2026-06-15", "2026-06-22", "2026-06-29"]
+
+
+def test_menu_refresh_refreshes_date_options(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "cookunity.handler.upcoming_mondays",
+        lambda n: ["2026-06-08", "2026-06-15", "2026-06-22", "2026-06-29"],
+    )
+    state = StubState()
+    with _serve(StubProxy(), state, tmp_path=tmp_path) as base:
+        status, body = _post(base + "/api/refresh?date=2026-04-27", {})
+    assert status == 200
+    assert body["ok"] is True
+    assert state.refreshed == ["2026-04-27"]
+    assert state.upcoming == ["2026-06-08", "2026-06-15", "2026-06-22", "2026-06-29"]
 
 
 # -- existing routes — light coverage so the table doesn't bit-rot ------------
