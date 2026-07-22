@@ -35,6 +35,7 @@ function syncFavUI() {
   document.querySelectorAll('.card').forEach(c => {
     c.classList.toggle('fav', isFav(c.dataset.key));
   });
+  applySort();  // starred cards pin to the front of their category
   const count = Object.keys(favs).length;
   const countEl = document.getElementById('favs-count');
   if (countEl) {
@@ -553,20 +554,22 @@ function applyFilters() {
 }
 
 function applySort() {
-  const mode = document.getElementById('sort').value;
+  const sortEl = document.getElementById('sort');
+  const mode = sortEl ? sortEl.value : '';
   document.querySelectorAll('section.category .grid').forEach(grid => {
     const cards = [...grid.querySelectorAll('.card')];
-    let sorted;
-    if (!mode) {
-      sorted = cards.sort((a, b) => (+a.dataset.origIdx) - (+b.dataset.origIdx));
-    } else {
-      const primary = mode === 'stars' ? 'stars' : 'reviews';
-      const secondary = mode === 'stars' ? 'reviews' : 'stars';
-      sorted = cards.sort((a, b) =>
-        ((+b.dataset[primary]) || 0) - ((+a.dataset[primary]) || 0) ||
+    cards.forEach((c, i) => { if (c.dataset.origIdx === undefined) c.dataset.origIdx = String(i); });
+    const primary = mode === 'stars' ? 'stars' : 'reviews';
+    const secondary = mode === 'stars' ? 'reviews' : 'stars';
+    const sorted = cards.sort((a, b) => {
+      // Starred meals pin to the front of their category, whatever the sort.
+      const favDiff = (isFav(b.dataset.key) ? 1 : 0) - (isFav(a.dataset.key) ? 1 : 0);
+      if (favDiff) return favDiff;
+      if (!mode) return (+a.dataset.origIdx) - (+b.dataset.origIdx);
+      return ((+b.dataset[primary]) || 0) - ((+a.dataset[primary]) || 0) ||
         ((+b.dataset[secondary]) || 0) - ((+a.dataset[secondary]) || 0) ||
-        (+a.dataset.origIdx) - (+b.dataset.origIdx));
-    }
+        (+a.dataset.origIdx) - (+b.dataset.origIdx);
+    });
     sorted.forEach(c => grid.appendChild(c));  // moving nodes keeps their listeners
   });
 }
