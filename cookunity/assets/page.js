@@ -530,10 +530,21 @@ function applyFilters() {
     const matchCart = !onlyCart || cartState.has(card.dataset.inv);
     card.classList.toggle('hidden', !(matchQ && matchCat && matchCart));
   });
+  let anyVisibleAtAll = false;
   document.querySelectorAll('section.category').forEach(sec => {
     const anyVisible = [...sec.querySelectorAll('.card')].some(c => !c.classList.contains('hidden'));
     sec.classList.toggle('hidden', !anyVisible);
+    if (anyVisible) anyVisibleAtAll = true;
   });
+  let none = document.getElementById('no-results');
+  if (!none) {
+    none = document.createElement('div');
+    none.id = 'no-results';
+    none.textContent = 'No meals match — try a different search, or clear the category / “only in cart” filters.';
+    const lastSec = [...document.querySelectorAll('section.category')].pop();
+    if (lastSec) lastSec.parentNode.appendChild(none);
+  }
+  none.classList.toggle('hidden', anyVisibleAtAll);
 }
 
 function highResImage(url) {
