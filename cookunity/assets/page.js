@@ -565,7 +565,11 @@ function applySort() {
       // Starred meals pin to the front of their category, whatever the sort.
       const favDiff = (isFav(b.dataset.key) ? 1 : 0) - (isFav(a.dataset.key) ? 1 : 0);
       if (favDiff) return favDiff;
-      if (!mode) return (+a.dataset.origIdx) - (+b.dataset.origIdx);
+      if (!mode) {
+        // Menu order: New meals surface right after the starred ones.
+        return ((+b.dataset.new) || 0) - ((+a.dataset.new) || 0) ||
+          (+a.dataset.origIdx) - (+b.dataset.origIdx);
+      }
       return ((+b.dataset[primary]) || 0) - ((+a.dataset[primary]) || 0) ||
         ((+b.dataset[secondary]) || 0) - ((+a.dataset[secondary]) || 0) ||
         (+a.dataset.origIdx) - (+b.dataset.origIdx);

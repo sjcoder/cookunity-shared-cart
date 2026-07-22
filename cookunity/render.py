@@ -135,6 +135,7 @@ def render_card(item: dict, is_bundle: bool = False) -> str:
     reviews_val = item.get("reviews") if not is_bundle else None
     return (
         f'<article class="card" data-inv="{inv_id}" data-key="{key}" '
+        f'data-new="{1 if (item.get("isNewMeal") or item.get("isNewBundle")) else 0}" '
         f'data-stars="{stars_val if isinstance(stars_val, (int, float)) else 0}" '
         f'data-reviews="{reviews_val if isinstance(reviews_val, (int, float)) else 0}" '
         f'data-search="{esc(searchable)}" data-item=\'{payload_attr}\'>'
