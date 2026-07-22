@@ -230,13 +230,29 @@ def test_bare_root_redirects_to_first_unordered_monday(tmp_path):
     assert ("get", "2026-05-11") not in proxy.calls
 
 
+def test_past_date_in_url_redirects_to_landing(tmp_path):
+    """A stale bookmark like /?date=<last month> bounces to `/` instead of
+    rendering a dead menu whose cart upstream will reject."""
+    proxy = StubProxy()
+    with _serve(proxy, StubState(), tmp_path=tmp_path) as base:
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def http_error_302(self, req, fp, code, msg, headers):
+                return fp  # don't follow
+
+        opener = urllib.request.build_opener(NoRedirect())
+        with opener.open(base + "/?date=2020-01-01") as resp:
+            assert resp.status == 302
+            assert resp.headers["location"] == "/"
+
+
 def test_explicit_date_in_url_skips_landing_redirect(tmp_path):
-    """If the user explicitly typed /?date=2026-04-27 (or clicked the dropdown),
+    """If the user explicitly picked a (non-past) date via the dropdown,
     respect it — even if that week is already ordered."""
     proxy = StubProxy(get_response=(200, json.dumps({"order": {"id": "x"}, "products": []}).encode()))
     with _serve(proxy, StubState(), tmp_path=tmp_path) as base:
-        # Renders 200 directly, no redirect.
-        with urllib.request.urlopen(base + "/?date=2026-04-27") as resp:
+        # Renders 200 directly, no redirect. Far-future so the past-date
+        # redirect (which compares against the real clock) never kicks in.
+        with urllib.request.urlopen(base + "/?date=2099-01-04") as resp:
             assert resp.status == 200
             assert b"<html" in resp.read()
 

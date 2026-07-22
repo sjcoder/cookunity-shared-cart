@@ -40,7 +40,8 @@ class State:
         self.include_out_of_stock = include_out_of_stock
         self.proxy = proxy
         self.fetch_menu = fetch_menu
-        self.upcoming_fn = upcoming_fn or (lambda: upcoming_mondays(4))
+        # 5 weeks: CookUnity provisions a cart for the next five Mondays.
+        self.upcoming_fn = upcoming_fn or (lambda: upcoming_mondays(5))
         self.cache: dict[str, dict] = {}
         self.lock = threading.Lock()
 

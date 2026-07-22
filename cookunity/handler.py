@@ -277,6 +277,17 @@ save.addEventListener('click', async () => {
                 return
             try:
                 d = _date_from_query(self.path, default_date_fn())
+            except ValueError as e:
+                return self._render_error(f"Couldn't load menu for that date: {e}")
+            if d < date.today().isoformat():
+                # Stale bookmark or a tab left open across a week boundary —
+                # bounce to the landing redirect, which picks a current week.
+                self.send_response(302)
+                self.send_header("location", "/")
+                self.send_header("cache-control", "no-store")
+                self.end_headers()
+                return
+            try:
                 entry = state.get(d)
             except Exception as e:
                 return self._render_error(f"Couldn't load menu for that date: {e}")
