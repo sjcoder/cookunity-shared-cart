@@ -227,17 +227,22 @@ function renderCart() {
         else {
           const meta_el = c.querySelector('.meta');
           if (meta_el) {
+            // Own row after .meta — inside the flex row it would sit inline
+            // on some cards and wrap on others depending on title width.
+            const row = document.createElement('div');
+            row.className = 'extras-row';
             const span = document.createElement('span');
             span.className = 'extras-hint';
             span.textContent = text;
-            meta_el.appendChild(span);
+            row.appendChild(span);
+            meta_el.insertAdjacentElement('afterend', row);
           }
         }
       } else if (hint) {
-        hint.remove();
+        (hint.closest('.extras-row') || hint).remove();
       }
     } else if (hint) {
-      hint.remove();
+      (hint.closest('.extras-row') || hint).remove();
     }
   });
 }

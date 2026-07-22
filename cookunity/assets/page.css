@@ -123,9 +123,8 @@ body.view-auth #favorites-view { display:none !important; }
 #cart header .plan-progress.met { color:#fff; font-weight:600; background:var(--ok); }
 #cart header .plan-progress.extras { color:#7a4b00; font-weight:600; background:#ffe0a3; }
 .extra-tag { display:inline-block; font-size:10px; padding:1px 6px; border-radius:3px; background:#ffe0a3; color:#7a4b00; text-transform:uppercase; letter-spacing:.04em; margin-left:4px; }
-/* flex-basis 100% forces the chip onto its own row (instead of floating
-   inline only on cards with short titles); max-width keeps the pill snug. */
-.extras-hint { font-size:11px; color:#7a4b00; background:#fff3d6; padding:1px 6px; border-radius:3px; font-weight:600; flex-basis:100%; max-width:max-content; }
+.extras-row { margin-top:4px; }
+.extras-hint { font-size:11px; color:#7a4b00; background:#fff3d6; padding:1px 6px; border-radius:3px; font-weight:600; }
 #no-results { text-align:center; color:var(--muted); padding:60px 20px; font-size:14px; }
 #no-results.hidden { display:none; }
 #order-banner { margin:16px auto 0; max-width:1200px; padding:0 24px; }
