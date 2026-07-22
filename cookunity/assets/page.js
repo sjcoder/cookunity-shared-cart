@@ -552,6 +552,25 @@ function applyFilters() {
   none.classList.toggle('hidden', anyVisibleAtAll);
 }
 
+function applySort() {
+  const mode = document.getElementById('sort').value;
+  document.querySelectorAll('section.category .grid').forEach(grid => {
+    const cards = [...grid.querySelectorAll('.card')];
+    let sorted;
+    if (!mode) {
+      sorted = cards.sort((a, b) => (+a.dataset.origIdx) - (+b.dataset.origIdx));
+    } else {
+      const primary = mode === 'stars' ? 'stars' : 'reviews';
+      const secondary = mode === 'stars' ? 'reviews' : 'stars';
+      sorted = cards.sort((a, b) =>
+        ((+b.dataset[primary]) || 0) - ((+a.dataset[primary]) || 0) ||
+        ((+b.dataset[secondary]) || 0) - ((+a.dataset[secondary]) || 0) ||
+        (+a.dataset.origIdx) - (+b.dataset.origIdx));
+    }
+    sorted.forEach(c => grid.appendChild(c));  // moving nodes keeps their listeners
+  });
+}
+
 function highResImage(url) {
   if (!url) return '';
   if (!url.includes('imgix.net')) return url;
@@ -642,8 +661,13 @@ async function refresh() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Remember each card's server-rendered position so "Menu order" can restore it.
+  document.querySelectorAll('section.category .grid').forEach(grid => {
+    [...grid.querySelectorAll('.card')].forEach((c, i) => { c.dataset.origIdx = String(i); });
+  });
   document.getElementById('search').addEventListener('input', applyFilters);
   document.getElementById('cat').addEventListener('change', applyFilters);
+  document.getElementById('sort').addEventListener('change', applySort);
   document.getElementById('only-cart').addEventListener('change', applyFilters);
   document.getElementById('refresh').addEventListener('click', refresh);
   document.getElementById('cart-reload').addEventListener('click', (e) => { e.stopPropagation(); syncCart(true); });

@@ -131,8 +131,12 @@ def render_card(item: dict, is_bundle: bool = False) -> str:
         else '<div class="thumb"></div>'
     )
 
+    stars_val = item.get("stars") if not is_bundle else None
+    reviews_val = item.get("reviews") if not is_bundle else None
     return (
         f'<article class="card" data-inv="{inv_id}" data-key="{key}" '
+        f'data-stars="{stars_val if isinstance(stars_val, (int, float)) else 0}" '
+        f'data-reviews="{reviews_val if isinstance(reviews_val, (int, float)) else 0}" '
         f'data-search="{esc(searchable)}" data-item=\'{payload_attr}\'>'
         f"{thumb}"
         f'<button class="fav-btn" type="button" data-key="{key}" '
@@ -314,6 +318,11 @@ def render_page(
   <button id="refresh" type="button" title="Re-fetch menu from CookUnity">↻ Refresh</button>
   <input id="search" type="search" placeholder="Search meals, chefs, cuisines…">
   <select id="cat"><option value="">All categories</option>{cat_options}</select>
+  <select id="sort" title="Sort meals">
+    <option value="">Menu order</option>
+    <option value="stars">Top rated</option>
+    <option value="reviews">Most reviewed</option>
+  </select>
   <label><input id="only-cart" type="checkbox"> Only in cart</label>
 </header>
 <main class="page">
