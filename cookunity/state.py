@@ -13,6 +13,7 @@ import sys
 import threading
 from pathlib import Path
 
+from cookunity.dates import upcoming_mondays
 from cookunity.env import now_iso
 from cookunity.proxy import CartProxy
 from cookunity.render import render_page
@@ -32,21 +33,27 @@ class State:
         menu_dir: Path,
         include_out_of_stock: bool,
         proxy: CartProxy,
-        upcoming: list[str],
         fetch_menu,  # Callable[[str, str, str], dict]
+        upcoming_fn=None,  # Callable[[], list[str]]
     ) -> None:
         self.menu_dir = menu_dir
         self.include_out_of_stock = include_out_of_stock
         self.proxy = proxy
-        self.upcoming = upcoming
         self.fetch_menu = fetch_menu
+        self.upcoming_fn = upcoming_fn or (lambda: upcoming_mondays(4))
         self.cache: dict[str, dict] = {}
         self.lock = threading.Lock()
 
+    @property
+    def upcoming(self) -> list[str]:
+        # Recomputed on every access: the server runs for weeks at a time, so
+        # a list captured at startup would drift into the past.
+        return self.upcoming_fn()
+
     # -- private --------------------------------------------------------------
-    def _render(self, menu_date: str, data: dict) -> bytes:
+    def _render(self, menu_date: str, data: dict, upcoming: list[str]) -> bytes:
         return render_page(
-            menu_date, data, self.include_out_of_stock, self.upcoming
+            menu_date, data, self.include_out_of_stock, upcoming
         ).encode("utf-8")
 
     def _fetch_live(self, menu_date: str) -> dict:
@@ -62,16 +69,27 @@ class State:
 
     def _load_or_fetch(self, menu_date: str) -> dict:
         """Caller must hold ``self.lock``."""
-        if menu_date in self.cache:
-            return self.cache[menu_date]
-        json_path = self.menu_dir / f"{menu_date}.json"
-        if json_path.exists():
-            data = json.loads(json_path.read_text())
-            if "_fetched_at" not in data:
-                data["_fetched_at"] = f"cached file ({json_path.name})"
+        upcoming = self.upcoming
+        cached = self.cache.get(menu_date)
+        if cached is not None:
+            if cached["upcoming"] == upcoming:
+                return cached
+            # Week rolled over since this page was rendered — the date
+            # dropdown baked into the HTML is stale. Re-render from data.
+            data = cached["data"]
         else:
-            data = self._fetch_live(menu_date)
-        entry = {"data": data, "page_html": self._render(menu_date, data)}
+            json_path = self.menu_dir / f"{menu_date}.json"
+            if json_path.exists():
+                data = json.loads(json_path.read_text())
+                if "_fetched_at" not in data:
+                    data["_fetched_at"] = f"cached file ({json_path.name})"
+            else:
+                data = self._fetch_live(menu_date)
+        entry = {
+            "data": data,
+            "page_html": self._render(menu_date, data, upcoming),
+            "upcoming": upcoming,
+        }
         self.cache[menu_date] = entry
         return entry
 
@@ -84,7 +102,12 @@ class State:
         """Force a live re-fetch, update disk + cache, and return the entry."""
         with self.lock:
             data = self._fetch_live(menu_date)
-            entry = {"data": data, "page_html": self._render(menu_date, data)}
+            upcoming = self.upcoming
+            entry = {
+                "data": data,
+                "page_html": self._render(menu_date, data, upcoming),
+                "upcoming": upcoming,
+            }
             self.cache[menu_date] = entry
             return entry
 

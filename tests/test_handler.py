@@ -64,7 +64,8 @@ class StubState:
 def _serve(proxy, state, default_date="2026-04-27", creds_meta=None, tmp_path: Path | None = None):
     creds_meta = creds_meta or {"source": "env", "saved_at": None}
     creds_path = (tmp_path or Path("/tmp")) / "creds.json"
-    handler = build_handler(state, proxy, default_date, creds_meta, creds_path)
+    default_date_fn = default_date if callable(default_date) else (lambda: default_date)
+    handler = build_handler(state, proxy, default_date_fn, creds_meta, creds_path)
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     port = server.server_address[1]
     t = threading.Thread(target=server.serve_forever, daemon=True)
@@ -110,6 +111,19 @@ def test_auth_check_reports_expired_on_403(tmp_path):
         _, body = _get(base + "/api/auth/check")
     assert body["ok"] is False
     assert body["status"] == 403
+
+
+def test_auth_check_follows_upcoming_across_week_rollover(tmp_path):
+    """A long-running server must test auth against the *current* next Monday,
+    not whatever the list was when the process started."""
+    proxy = StubProxy(get_response=(200, b'{"products":[]}'))
+    state = StubState()
+    with _serve(proxy, state, tmp_path=tmp_path) as base:
+        _, body = _get(base + "/api/auth/check")
+        assert body["tested_date"] == "2026-04-27"
+        state.upcoming = ["2026-05-04", "2026-05-11"]  # week rolled over
+        _, body = _get(base + "/api/auth/check")
+        assert body["tested_date"] == "2026-05-04"
 
 
 def test_auth_check_with_no_token_reports_missing_creds(tmp_path):

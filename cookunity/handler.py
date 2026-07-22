@@ -37,7 +37,8 @@ def _date_from_body(payload: dict, default_date: str) -> str:
 def build_handler(
     state: State,
     proxy: CartProxy,
-    default_date: str,
+    default_date_fn,  # Callable[[], str] — re-evaluated per request so a
+    # server left running for weeks never serves a date frozen at startup.
     creds_meta: dict,
     creds_path: Path,
 ):
@@ -88,10 +89,10 @@ def build_handler(
         def _resolve_date(self, payload: dict | None = None) -> str:
             """Prefer ``?date=`` in the URL; fall back to the JSON body; then default."""
             if "date=" in self.path:
-                return _date_from_query(self.path, default_date)
+                return _date_from_query(self.path, default_date_fn())
             if payload is not None:
-                return _date_from_body(payload, default_date)
-            return default_date
+                return _date_from_body(payload, default_date_fn())
+            return default_date_fn()
 
         # -- routing ----------------------------------------------------------
         def do_GET(self):  # noqa: N802
@@ -125,7 +126,7 @@ def build_handler(
         def _pick_landing_date(self) -> str:
             """Walk upcoming Mondays and return the first one without an order.
 
-            Falls back to ``default_date`` if everything's ordered or upstream
+            Falls back to the default date if everything's ordered or upstream
             fails. Result is cached briefly so back-to-back reloads don't each
             spawn N CookUnity round-trips.
             """
@@ -134,8 +135,8 @@ def build_handler(
             if cached["date"] and cached["expires"] > now:
                 return cached["date"]  # type: ignore[return-value]
 
-            chosen = default_date
-            for d in state.upcoming or [default_date]:
+            chosen = default_date_fn()
+            for d in state.upcoming or [chosen]:
                 status, body = proxy.get(d)
                 if status != 200:
                     # Auth busted or upstream blip — show whatever we'd default
@@ -166,7 +167,7 @@ def build_handler(
                 self.end_headers()
                 return
             try:
-                d = _date_from_query(self.path, default_date)
+                d = _date_from_query(self.path, default_date_fn())
                 entry = state.get(d)
             except Exception as e:
                 return self._render_error(f"Couldn't load menu for that date: {e}")
@@ -179,7 +180,7 @@ def build_handler(
 
         def _get_cart(self):
             try:
-                d = _date_from_query(self.path, default_date)
+                d = _date_from_query(self.path, default_date_fn())
             except ValueError as e:
                 return self._json(400, {"error": str(e)})
             status, body = proxy.get(d)
@@ -196,7 +197,7 @@ def build_handler(
                     "status": 0,
                     "message": "No credentials loaded — paste a curl in #auth.",
                 })
-            test_date = (state.upcoming or [default_date])[0]
+            test_date = (state.upcoming or [default_date_fn()])[0]
             status, body = proxy.get(test_date)
             if status == 200:
                 return self._json(200, {"ok": True, "status": 200, "tested_date": test_date})
@@ -271,7 +272,7 @@ def build_handler(
         # -- menu refresh -----------------------------------------------------
         def _refresh(self):
             try:
-                d = _date_from_query(self.path, default_date)
+                d = _date_from_query(self.path, default_date_fn())
             except ValueError as e:
                 return self._json(400, {"error": str(e)})
             try:

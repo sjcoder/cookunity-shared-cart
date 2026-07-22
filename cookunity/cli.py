@@ -44,10 +44,10 @@ def _pick_default_date(explicit: str | None) -> str:
     """Pick the default date shown when the URL has no ``?date=``.
 
     Priority: explicit CLI flag, then the next upcoming Monday, then the newest
-    JSON we've cached on disk.
+    JSON we've cached on disk. Called per request (not once at startup) so a
+    server left running across week boundaries keeps pointing at the future.
     """
     if explicit:
-        date.fromisoformat(explicit)
         return explicit
     upcoming = upcoming_mondays(1)
     if (MENU_DIR / f"{upcoming[0]}.json").exists():
@@ -72,8 +72,11 @@ def main() -> int:
     parser.add_argument("--include-out-of-stock", action="store_true")
     args = parser.parse_args()
 
-    upcoming = upcoming_mondays(4)
-    default_date = _pick_default_date(args.date)
+    if args.date:
+        date.fromisoformat(args.date)  # fail fast on a malformed flag
+
+    def default_date_fn() -> str:
+        return _pick_default_date(args.date)
 
     creds = load_creds(CREDS_PATH)
     creds_meta = {"source": creds.source, "saved_at": creds.saved_at}
@@ -87,22 +90,21 @@ def main() -> int:
         menu_dir=MENU_DIR,
         include_out_of_stock=args.include_out_of_stock,
         proxy=proxy,
-        upcoming=upcoming,
         fetch_menu=fetch_menu,
     )
 
     if proxy.token:
-        state.preload(default_date)
+        state.preload(default_date_fn())
     else:
         sys.stderr.write(
             "! no credentials loaded yet — open the UI and use #auth to paste a curl.\n"
         )
 
-    handler = build_handler(state, proxy, default_date, creds_meta, CREDS_PATH)
+    handler = build_handler(state, proxy, default_date_fn, creds_meta, CREDS_PATH)
     server = ThreadingHTTPServer((args.host, args.port), handler)
 
     lan_ip = os.environ.get("CU_LAN_IP") or _lan_ip()
-    print(f"→ default date: {default_date} · upcoming: {', '.join(upcoming)}")
+    print(f"→ default date: {default_date_fn()} · upcoming: {', '.join(state.upcoming)}")
     print(f"  local:  http://127.0.0.1:{args.port}/")
     if lan_ip:
         print(f"  LAN:    http://{lan_ip}:{args.port}/   ← share this with your partner")

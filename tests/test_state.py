@@ -24,13 +24,13 @@ def _fake_fetch_menu(expected_call_count: list[int]):
     return fetch
 
 
-def _state(tmp_path, fetch):
+def _state(tmp_path, fetch, upcoming=("2026-04-27",)):
     return State(
         menu_dir=tmp_path,
         include_out_of_stock=False,
         proxy=CartProxy("t", "c", "seed"),
-        upcoming=["2026-04-27"],
         fetch_menu=fetch,
+        upcoming_fn=lambda: list(upcoming),
     )
 
 
@@ -88,11 +88,46 @@ def test_get_raises_without_creds_when_disk_empty(tmp_path):
         menu_dir=tmp_path,
         include_out_of_stock=False,
         proxy=CartProxy("", "", ""),  # no auth
-        upcoming=["2026-04-27"],
         fetch_menu=_fake_fetch_menu([]),
+        upcoming_fn=lambda: ["2026-04-27"],
     )
     with pytest.raises(RuntimeError, match="No auth"):
         s.get("2026-04-27")
+
+
+def test_upcoming_recomputes_on_every_access(tmp_path):
+    """The server runs for weeks; ``upcoming`` must never be a startup snapshot."""
+    weeks = [["2026-04-27"], ["2026-05-04"]]
+    s = State(
+        menu_dir=tmp_path,
+        include_out_of_stock=False,
+        proxy=CartProxy("t", "c", "seed"),
+        fetch_menu=_fake_fetch_menu([]),
+        upcoming_fn=lambda: weeks[0],
+    )
+    assert s.upcoming == ["2026-04-27"]
+    weeks[0] = ["2026-05-04"]  # simulate the week rolling over
+    assert s.upcoming == ["2026-05-04"]
+
+
+def test_cached_page_rerenders_when_week_rolls_over(tmp_path):
+    """The date dropdown is baked into cached HTML — a week rollover must not
+    keep serving last week's dropdown."""
+    (tmp_path / "2026-04-27.json").write_text(json.dumps(make_menu()))
+    upcoming = [["2026-04-27", "2026-05-04"]]
+    s = State(
+        menu_dir=tmp_path,
+        include_out_of_stock=False,
+        proxy=CartProxy("t", "c", "seed"),
+        fetch_menu=_fake_fetch_menu([]),
+        upcoming_fn=lambda: upcoming[0],
+    )
+    first = s.get("2026-04-27")
+    assert first is s.get("2026-04-27")  # stable while the week is unchanged
+    upcoming[0] = ["2026-05-04", "2026-05-11"]
+    second = s.get("2026-04-27")
+    assert second is not first
+    assert b"2026-05-11" in second["page_html"]
 
 
 def test_latest_menu_date_picks_newest(tmp_path):
