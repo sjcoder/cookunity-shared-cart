@@ -87,6 +87,115 @@ def test_get_cart_shape():
     assert body == b'{"cart_id":"from-server"}'
 
 
+def test_get_refreshes_cart_id_mapping():
+    """Autopilot regenerates cart ids; every GET must resync the mapping so
+    mutations target the cart the user is looking at."""
+    p = _make_proxy()
+    p.cart_id_by_date["2026-04-27"] = "stale-uuid"
+    with _mocked_urlopen(b'{"cart_id":"fresh-uuid"}'):
+        p.get("2026-04-27")
+    assert p.cart_id_by_date["2026-04-27"] == "fresh-uuid"
+
+
+# -- get_true_cart: seeing through autopilot's suggestion ---------------------
+
+
+def _scripted_urlopen(responses: list[tuple[bytes, int]]):
+    """Return (patch_ctx, calls) where each urlopen pops the next response."""
+    calls: list = []
+    idx = [0]
+
+    def fake(req, timeout=None):
+        calls.append(req)
+        body, status = responses[min(idx[0], len(responses) - 1)]
+        idx[0] += 1
+        resp = MagicMock()
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = lambda *a: None
+        resp.status = status
+        resp.read.return_value = body
+        return resp
+
+    return patch("cookunity.proxy.urllib.request.urlopen", side_effect=fake), calls
+
+
+def _cart_body(ids: list[str], cart_id: str = "c-1", qty: int = 1) -> bytes:
+    return json.dumps(
+        {"cart_id": cart_id, "products": [{"inventory_id": i, "quantity": qty} for i in ids]}
+    ).encode()
+
+
+def _rec_body(date: str, ids: list[str]) -> bytes:
+    return json.dumps(
+        {"data": {"upcomingDays": [
+            {"date": date, "recommendation": {"meals": [{"inventoryId": i} for i in ids]}}
+        ]}}
+    ).encode()
+
+
+def test_get_true_cart_nudges_when_cart_equals_recommendation():
+    p = _make_proxy()
+    suggestion = ["ii-1", "ii-2", "ii-3"]
+    real = ["ii-9"]
+    ctx, calls = _scripted_urlopen([
+        (_cart_body(suggestion), 200),                 # GET → suggestion
+        (_rec_body("2026-04-27", suggestion), 200),    # GraphQL recommendation
+        (b"{}", 200),                                  # nudge add
+        (b"{}", 200),                                  # nudge remove
+        (_cart_body(real, cart_id="c-2"), 200),        # re-GET → real cart
+    ])
+    with ctx:
+        status, body = p.get_true_cart("2026-04-27")
+    assert status == 200
+    assert json.loads(body)["products"][0]["inventory_id"] == "ii-9"
+    methods = [c.method for c in calls]
+    assert methods == ["GET", "POST", "POST", "DELETE", "GET"]
+
+
+def test_get_true_cart_passes_through_when_cart_differs_from_recommendation():
+    p = _make_proxy()
+    ctx, calls = _scripted_urlopen([
+        (_cart_body(["ii-1", "ii-9"]), 200),           # GET → user-looking cart
+        (_rec_body("2026-04-27", ["ii-1", "ii-2"]), 200),
+    ])
+    with ctx:
+        status, body = p.get_true_cart("2026-04-27")
+    assert status == 200
+    assert len(json.loads(body)["products"]) == 2
+    assert [c.method for c in calls] == ["GET", "POST"]  # no nudge mutations
+
+
+def test_get_true_cart_respects_nudge_cooldown():
+    """If the user's real cart legitimately equals the recommendation, nudge
+    once and then leave it alone."""
+    p = _make_proxy()
+    suggestion = ["ii-1", "ii-2"]
+    responses = [
+        (_cart_body(suggestion), 200),
+        (_rec_body("2026-04-27", suggestion), 200),
+        (b"{}", 200), (b"{}", 200),
+        (_cart_body(suggestion), 200),   # re-GET: unchanged (it WAS the real cart)
+        (_cart_body(suggestion), 200),   # second get_true_cart's GET
+    ]
+    ctx, calls = _scripted_urlopen(responses)
+    with ctx:
+        p.get_true_cart("2026-04-27")
+        n_after_first = len(calls)
+        p.get_true_cart("2026-04-27")
+    # Second call: exactly one more request (the plain GET), no second dance.
+    assert len(calls) == n_after_first + 1
+
+
+def test_get_true_cart_skips_ordered_and_empty_carts():
+    p = _make_proxy()
+    ctx, calls = _scripted_urlopen([
+        (json.dumps({"cart_id": "c", "products": [], "order": None}).encode(), 200),
+    ])
+    with ctx:
+        p.get_true_cart("2026-04-27")
+    assert [c.method for c in calls] == ["GET"]  # no GraphQL, no nudge
+
+
 # -- cart UUID discovery ------------------------------------------------------
 
 

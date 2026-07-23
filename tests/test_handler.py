@@ -31,6 +31,11 @@ class StubProxy:
         self.calls.append(("get", date))
         return self._get_response
 
+    def get_true_cart(self, date):
+        # The real proxy's suggestion-detection is unit-tested in test_proxy;
+        # for handler routing it behaves like a plain get.
+        return self.get(date)
+
     def add(self, date, inv, qty=1):
         self.calls.append(("add", date, inv, qty))
         return 200, b'{"ok":true}'

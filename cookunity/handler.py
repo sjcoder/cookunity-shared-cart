@@ -303,7 +303,7 @@ save.addEventListener('click', async () => {
                 d = _date_from_query(self.path, default_date_fn())
             except ValueError as e:
                 return self._json(400, {"error": str(e)})
-            status, body = proxy.get(d)
+            status, body = proxy.get_true_cart(d)
             self._write(status, "application/json", body, extra_headers={"cache-control": "no-store"})
 
         def _auth_check(self):
@@ -481,7 +481,7 @@ save.addEventListener('click', async () => {
             ``entityId`` + ``batchId`` for every product. ``None`` means we
             couldn't resolve something cleanly — don't send a half-formed order.
             """
-            status, body = proxy.get(menu_date)
+            status, body = proxy.get_true_cart(menu_date)
             if status != 200:
                 return None
             try:
