@@ -36,6 +36,10 @@ class StubProxy:
         # for handler routing it behaves like a plain get.
         return self.get(date)
 
+    def cutoff_for(self, date):
+        self.calls.append(("cutoff_for", date))
+        return "2026-04-23T19:00:00.000Z"
+
     def add(self, date, inv, qty=1):
         self.calls.append(("add", date, inv, qty))
         return 200, b'{"ok":true}'

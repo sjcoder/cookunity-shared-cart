@@ -206,6 +206,8 @@ save.addEventListener('click', async () => {
                 return self._get_index()
             if path == "/api/cart":
                 return self._get_cart()
+            if path == "/api/day":
+                return self._get_day()
             if path == "/api/creds":
                 return self._get_creds()
             if path == "/api/auth/check":
@@ -305,6 +307,14 @@ save.addEventListener('click', async () => {
                 return self._json(400, {"error": str(e)})
             status, body = proxy.get_true_cart(d)
             self._write(status, "application/json", body, extra_headers={"cache-control": "no-store"})
+
+        def _get_day(self):
+            """Per-date metadata the cart payload doesn't carry: the order cutoff."""
+            try:
+                d = _date_from_query(self.path, default_date_fn())
+            except ValueError as e:
+                return self._json(400, {"error": str(e)})
+            self._json(200, {"date": d, "cutoff": proxy.cutoff_for(d)})
 
         def _auth_check(self):
             """Lightweight ping: hit the cart endpoint for the next upcoming

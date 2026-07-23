@@ -313,6 +313,7 @@ def render_page(
   <h1><span class="emoji" aria-hidden="true">😽</span> <span class="kitty">Kitty's</span> Menu</h1>
   <select id="date-picker" title="Delivery date (Monday)">{date_options}</select>
   <span class="meta">{total_count} items · data from <span id="fetched-at">{esc(fetched_at)}</span></span>
+  <span id="cutoff" class="cutoff" style="display:none"></span>
   <a id="favs-link" class="nav-link" href="#favorites">★ Favorites <span class="count" id="favs-count">0</span></a>
   <a id="auth-link" class="nav-link" href="#auth" title="Update credentials">⚙ Auth <span id="auth-dot" data-state="unknown" aria-hidden="true"></span></a>
   <a id="menu-link" class="nav-link" href="#" style="display:none">← Menu</a>

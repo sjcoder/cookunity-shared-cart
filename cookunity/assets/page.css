@@ -123,6 +123,9 @@ body.view-auth #favorites-view { display:none !important; }
 #cart header .plan-progress.met { color:#fff; font-weight:600; background:var(--ok); }
 #cart header .plan-progress.extras { color:#7a4b00; font-weight:600; background:#ffe0a3; }
 .extra-tag { display:inline-block; font-size:10px; padding:1px 6px; border-radius:3px; background:#ffe0a3; color:#7a4b00; text-transform:uppercase; letter-spacing:.04em; margin-left:4px; }
+.cutoff { font-size:12px; font-weight:600; color:#7a4b00; background:#fff3d6; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+.cutoff.soon { color:#8a1026; background:#fdecef; }
+.cutoff.closed { color:var(--muted); background:var(--line); }
 .extras-row { margin-top:4px; }
 .extras-hint { font-size:11px; color:#7a4b00; background:#fff3d6; padding:1px 6px; border-radius:3px; font-weight:600; }
 #no-results { text-align:center; color:var(--muted); padding:60px 20px; font-size:14px; }

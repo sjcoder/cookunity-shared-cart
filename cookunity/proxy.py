@@ -33,8 +33,8 @@ CREATE_ORDER_QUERY = """mutation createOrder($order: CreateOrderInput!, $origin:
 }
 """
 
-RECOMMENDATION_QUERY = """query upcomingDays {
-  upcomingDays { date recommendation { meals { inventoryId } } }
+DAY_INFO_QUERY = """query upcomingDays {
+  upcomingDays { date cutoff { time } recommendation { meals { inventoryId } } }
 }
 """
 
@@ -56,7 +56,7 @@ class CartProxy:
         self.cookie = cookie
         self.cart_id = cart_id  # seed; refined per-date once discovered
         self.cart_id_by_date: dict[str, str] = {}
-        self._rec_cache: dict[str, tuple[float, frozenset[str]]] = {}
+        self._day_cache: dict[str, tuple[float, frozenset[str], str | None]] = {}
         self._nudged_at: dict[str, float] = {}
         self._nudge_lock = threading.Lock()
 
@@ -163,19 +163,20 @@ class CartProxy:
                 pass
         return status, body
 
-    def recommendation_ids(self, menu_date: str) -> frozenset[str]:
-        """Inventory ids of CookUnity's autopilot suggestion for ``menu_date``.
+    def _day_info(self, menu_date: str) -> tuple[frozenset[str], str | None]:
+        """(recommendation inventory ids, cutoff ISO time) for ``menu_date``.
 
-        Empty set when the week has no recommendation or the query fails.
+        Empty set / None when the week has no data or the query fails.
         Cached briefly — the UI polls the cart every 30s.
         """
         now = time.time()
-        cached = self._rec_cache.get(menu_date)
+        cached = self._day_cache.get(menu_date)
         if cached and now - cached[0] < REC_CACHE_TTL:
-            return cached[1]
+            return cached[1], cached[2]
         ids: frozenset[str] = frozenset()
+        cutoff: str | None = None
         status, body = self._graphql(
-            {"operationName": "upcomingDays", "variables": {}, "query": RECOMMENDATION_QUERY}
+            {"operationName": "upcomingDays", "variables": {}, "query": DAY_INFO_QUERY}
         )
         if status == 200:
             try:
@@ -186,11 +187,18 @@ class CartProxy:
                         ids = frozenset(
                             m.get("inventoryId") for m in meals if m.get("inventoryId")
                         )
+                        cutoff = (d.get("cutoff") or {}).get("time")
                         break
             except (json.JSONDecodeError, AttributeError):
                 pass
-        self._rec_cache[menu_date] = (now, ids)
-        return ids
+        self._day_cache[menu_date] = (now, ids, cutoff)
+        return ids, cutoff
+
+    def recommendation_ids(self, menu_date: str) -> frozenset[str]:
+        return self._day_info(menu_date)[0]
+
+    def cutoff_for(self, menu_date: str) -> str | None:
+        return self._day_info(menu_date)[1]
 
     def get_true_cart(self, menu_date: str) -> tuple[int, bytes]:
         """GET the cart, seeing through autopilot's suggestion overlay.

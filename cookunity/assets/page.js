@@ -307,6 +307,42 @@ async function syncCart(showToast=false) {
   }
 }
 
+// -- order-cutoff countdown ---------------------------------------------------
+let cutoffAt = null;
+
+function renderCutoff() {
+  const el = document.getElementById('cutoff');
+  if (!el || !cutoffAt) return;
+  const ms = cutoffAt.getTime() - Date.now();
+  const when = cutoffAt.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  el.style.display = '';
+  el.classList.remove('soon', 'closed');
+  if (ms <= 0) {
+    el.textContent = `ordering closed (cutoff was ${when})`;
+    el.classList.add('closed');
+    return;
+  }
+  const totalMin = Math.floor(ms / 60000);
+  const d = Math.floor(totalMin / 1440), h = Math.floor((totalMin % 1440) / 60), m = totalMin % 60;
+  const left = d >= 1 ? `${d}d ${h}h` : h >= 1 ? `${h}h ${m}m` : `${m}m`;
+  el.textContent = `⏳ order by ${when} · ${left} left`;
+  if (ms < 3 * 3600000) el.classList.add('soon');
+}
+
+async function loadCutoff() {
+  try {
+    const res = await fetch(withDate('/api/day'), { cache: 'no-store' });
+    if (!res.ok) return;
+    const body = await res.json();
+    if (!body.cutoff) return;
+    const t = new Date(body.cutoff);
+    if (isNaN(t.getTime())) return;
+    cutoffAt = t;
+    renderCutoff();
+    setInterval(renderCutoff, 30000);
+  } catch {}
+}
+
 async function checkAuth() {
   const btn = document.getElementById('auth-test');
   const out = document.getElementById('auth-test-result');
@@ -710,6 +746,7 @@ document.addEventListener('DOMContentLoaded', () => {
   syncFavUI();
   applyRoute();
   syncCart();
+  loadCutoff();
   // Re-sync when the tab regains focus and every 30s while visible.
   document.addEventListener('visibilitychange', () => { if (!document.hidden) syncCart(); });
   setInterval(() => { if (!document.hidden) syncCart(); }, 30000);
